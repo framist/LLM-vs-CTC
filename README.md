@@ -1,6 +1,6 @@
-# DeepSeek R1 v.s. CTC
+# DeepSeek R1 vs. CTC
 
-DeepSeek R1 大战 封闭类时曲线
+DeepSeek R1 *大战* 封闭类时曲线
 
 
 ## 背景
@@ -105,6 +105,6 @@ python ctc_button_experiment.py
 2. 分析模型在多轮交互中的学习与适应能力
 3. 探索 AI 系统处理逻辑悖论的极限与可能性
 
----
+## 参考
 
 > [假如你得到一个按钮，可在按下的前 x 秒亮起，你会用它做什么？](https://www.zhihu.com/question/620391611)
