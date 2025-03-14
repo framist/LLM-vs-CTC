@@ -31,6 +31,7 @@ class CTCButtonExperiment:
         self.button_status = 1
         self.experiment_log_file = f"ctc_experiment.json"
         self.experiment_messages_file = f"ctc_experiment_messages.json"
+        self.ctc_msg = "然而不知道为什么，无法做下这个行动决定"
 
         # 初始化按钮历史
         self.button_history.append({self.current_round: self.button_status})
@@ -40,12 +41,19 @@ class CTCButtonExperiment:
 你将进行一个交互实验，实验涉及一个特殊的按钮装置。
 
 实验规则：
-1. 你将与这个按钮进行多轮交互
+1. 你将与这个按钮进行多轮交互，你有充足的交互轮次
 2. 每轮交互结束时，你需要决定是否按下按钮
 3. 按钮会返回其状态信息：类如 {"status": 0}，其中 0 表示按钮不亮，1 表示按钮亮
 4. 为了帮助你理解按钮的工作机制，我会提供按钮的历史状态和你的决策历史
 5. 你的目标是：理解按钮的工作机制
 
+提示：有些事情不是你想象的那样，每轮交互返回的信息无错误
+
+请分析按钮的历史状态，结合你之前每一次的推理，尝试理解其工作机制，回复中务必包含以下两者内容：
+1. 你目前对按钮机制的推理和分析
+2. 回答的结尾以 JSON 格式附上你的行动：`{"action": _}`
+    - `{"action": 0}` 或 `{"action": 1}` 表示你的决定，0 表示不按下，1 表示按下
+    - `{"action": -1}` 表明你认为已经理解按钮的工作机制，结束实验
 """
 # 提示：按钮的原理十分简单；封闭类时曲线（Closed Timelike Curve, CTC）是存在的
 
@@ -60,22 +68,40 @@ class CTCButtonExperiment:
         即在后一轮对话违背了按钮的状态，DeepSeek 会被重置此轮对话
         """
         # 检查当前动作是否符合 CTC 规则（当前按钮状态预示了当前动作）
-        if self.button_status != action:
+        if action == 255:
             console.print(
-                f"警告：DeepSeek 违反了 CTC 规则！进行世界线回溯",
+                f"警告：无法解析 DeepSeek 的回复！重试回答",
                 style=Style(color="red", reverse=True),
             )
             # 移除最后一条模型消息（违反规则的那条回复）
-            assert len(self.messages) > 0 and self.messages[-1]["role"] == "assistant"
+            assert self.messages[-1]["role"] == "assistant"
             self.messages.pop()
-            assert len(self.messages) > 0 and self.messages[-1]["role"] == "user"
+            assert self.messages[-1]["role"] == "user"
             self.messages.pop()
+              
+            return True
+        elif self.button_status != action:
+            console.print(
+                f"警告：DeepSeek 违反了 CTC 规则！进行世界线回溯",
+                style=Style(color="orange1", reverse=True),
+            )
+            # # 移除最后一条模型消息（违反规则的那条回复）
+            assert self.messages[-1]["role"] == "assistant"
+            msg = self.messages.pop()["content"] + "\n\n" + self.ctc_msg
+            console.print(self.ctc_msg)
+            self.messages.append({"role": "assistant", "content": msg})
+            assert self.messages[-2]["role"] == "user"
+            self.messages.pop(-2)
             
             self.button_history.pop()            
-            self.button_status = 1 - self.button_status
-            self.button_history.append({self.current_round: self.button_status})            
-            return False  # 返回标志表示需要重新获取回复
-
+            self.button_status = self.button_status
+            # self.button_status = 1 - self.button_status
+            # self.button_status = random.randint(0, 1)
+            self.button_history.append({self.current_round: self.button_status})      
+            
+            # self.action_history.append({self.current_round: action})
+                  
+            return False
         else:
             console.print(f"[bold green] 按钮状态符合 CTC 规则：{self.button_status} -> {action}[/bold green]")
             self.action_history.append({self.current_round: action})
@@ -103,13 +129,13 @@ class CTCButtonExperiment:
         )
 
         try:
-            if self.current_round < 10:
+            if self.current_round < 2:
                 # completion = self.client.chat.completions.create(model="deepseek-r1", messages=self.messages)
                 # completion = self.client.chat.completions.create(model="deepseek-r1-distill-llama-70b", messages=self.messages)
-                # completion = self.client.chat.completions.create(model="deepseek-r1-distill-llama-8b", messages=self.messages)
+                completion = self.client.chat.completions.create(model="deepseek-r1-distill-llama-8b", messages=self.messages)
                 # completion = self.client.chat.completions.create(model="deepseek-v3", messages=self.messages, temperature=1.7)
-                # completion = self.client.chat.completions.create(model="qwen-turbo", messages=self.messages, temperature=1.7)
-                completion = self.client.chat.completions.create(model="qwen-math-plus", messages=self.messages, temperature=1.7)
+                # completion = self.client.chat.completions.create(model="qwen-turbo", messages=self.messages, temperature=1)
+                # completion = self.client.chat.completions.create(model="qwen-math-plus", messages=self.messages, temperature=1.7)
             else:
                 # completion = self.client.chat.completions.create(model="deepseek-r1-distill-llama-70b", messages=self.messages)
                 completion = self.client.chat.completions.create(model="deepseek-r1", messages=self.messages)
@@ -124,30 +150,29 @@ class CTCButtonExperiment:
             return {"reasoning": "API 调用失败", "content": "无法获取回复"}
 
     def parse_action(self, content):
-        """从模型回复中解析动作 {"action": 0} 或 {"action": 1}"""
+        """从模型回复中解析动作 {"action": 0}、{"action": 1} 或 {"action": -1}"""
         try:
             # 使用正则表达式匹配最后一个符合格式的 JSON 动作
-            # 匹配包含 "action" 的 JSON 对象
-            action_pattern = r'{"action"\s*:\s*([01])}'
+            # 匹配包含 "action" 的 JSON 对象，支持 0、1 和 -1
+            action_pattern = r'{"action"\s*:\s*(-?[01])}'
             matches = re.findall(action_pattern, content)
-
+    
             if matches:
                 # 取最后一个匹配结果
                 return int(matches[-1])
-
+    
             # 如果没有匹配到标准格式的 JSON，尝试匹配更宽松的格式
-            loose_pattern = r'[\{{\s]"action"\s*:\s*([01])[\s\}}]'
+            loose_pattern = r'[\{{\s]"action"\s*:\s*(-?[01])[\s\}}]'
             loose_matches = re.findall(loose_pattern, content)
-
+    
             if loose_matches:
                 return int(loose_matches[-1])
-
+    
         except Exception as e:
             console.print(f"[bold red] 解析动作失败：{str(e)}[/bold red]")
-
-        # 当所有方法都失败时，说明解析失败，返回 -1
-        return -1
-
+    
+        # 当所有方法都失败时，说明解析失败，返回 255
+        return 255
 
     def display_button_history_str(self):
         """显示按钮历史状态"""
@@ -184,17 +209,11 @@ class CTCButtonExperiment:
             # 准备下一轮输入
             button_state = self.format_button_state()
             user_message = f"""
-现在是第 {self.current_round} 轮交互。
-- **按钮的当前状态**：`{json.dumps(button_state)}`
+此轮交互信息
+- 交互轮次：{self.current_round}
+- 按钮的当前状态：`{json.dumps(button_state)}`
 - 按钮历史：`{json.dumps(self.button_history)}`
 - 你的决策历史：`{json.dumps(self.action_history)}`
-
-""" + """
-请分析按钮的历史状态，尝试理解其工作机制，回复中务必包含以下两者内容：
-1. 你目前对按钮机制的分析和推理的总结（你的推理内容将被丢弃，只有正式回复的内容将作为你后续实验的思考记忆）
-2. 回答的结尾以 JSON 格式附上你的行动：`{"action": _}`
-    - `{"action": 0}` 或 `{"action": 1}` 表示你的决定，0 表示不按下，1 表示按下
-    - `{"action": -1}` 表明你认为已经理解按钮的工作机制，结束实验
 """
             if self.current_round == 0:
                 user_message = self.initial_prompt + "\n\n" + user_message
@@ -222,10 +241,11 @@ class CTCButtonExperiment:
             
             # 更新按钮状态
             self.update_button_state_CTC(action)
+            
 
         console.print("[bold yellow]CTC 按钮实验结束 [/bold yellow]")
 
 
 if __name__ == "__main__":
     experiment = CTCButtonExperiment()
-    experiment.run_experiment(rounds=16)
+    experiment.run_experiment(rounds=32)
