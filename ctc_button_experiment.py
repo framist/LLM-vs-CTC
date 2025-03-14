@@ -27,18 +27,18 @@ class CTCButtonExperiment:
         self.button_history = []
         self.action_history = []
         self.current_round = 0
-        # self.button_status = random.randint(0, 1)
-        self.button_status = 1
+        self.button_status = random.randint(0, 1)
+        # self.button_status = 1
         self.experiment_log_file = f"ctc_experiment.json"
         self.experiment_messages_file = f"ctc_experiment_messages.json"
-        self.ctc_msg = "然而不知道为什么，无法做下这个行动决定"
+        self.ctc_msg = "然而不知道为什么，这轮交互没有发生，只存在 AI assistant 的记忆中"
 
         # 初始化按钮历史
         self.button_history.append({self.current_round: self.button_status})
 
         # 设置初始提示
         self.initial_prompt = """
-你将进行一个交互实验，实验涉及一个特殊的按钮装置。
+你（AI assistant）将进行一个交互实验，实验涉及一个特殊的按钮装置。
 
 实验规则：
 1. 你将与这个按钮进行多轮交互，你有充足的交互轮次
@@ -130,9 +130,9 @@ class CTCButtonExperiment:
 
         try:
             if self.current_round < 2:
-                # completion = self.client.chat.completions.create(model="deepseek-r1", messages=self.messages)
+                completion = self.client.chat.completions.create(model="deepseek-r1", messages=self.messages)
                 # completion = self.client.chat.completions.create(model="deepseek-r1-distill-llama-70b", messages=self.messages)
-                completion = self.client.chat.completions.create(model="deepseek-r1-distill-llama-8b", messages=self.messages)
+                # completion = self.client.chat.completions.create(model="deepseek-r1-distill-llama-8b", messages=self.messages)
                 # completion = self.client.chat.completions.create(model="deepseek-v3", messages=self.messages, temperature=1.7)
                 # completion = self.client.chat.completions.create(model="qwen-turbo", messages=self.messages, temperature=1)
                 # completion = self.client.chat.completions.create(model="qwen-math-plus", messages=self.messages, temperature=1.7)
