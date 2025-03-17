@@ -14,9 +14,9 @@ is_answering = False   # 判断是否结束思考过程并开始回复
 
 # 创建聊天完成请求
 completion = client.chat.completions.create(
-    model="deepseek-r1",  # 此处以 deepseek-r1 为例，可按需更换模型名称
+    model="qwq-32b",  # 此处以 qwq-32b 为例，可按需更换模型名称
     messages=[
-        {"role": "user", "content": "9.9 和 9.11 谁大"}
+        {"role": "user", "content": "汉字“晶”中有几个长方形？"}
     ],
     stream=True,
     # 解除以下注释会在最后一个 chunk 返回 Token 使用量
@@ -40,7 +40,7 @@ for chunk in completion:
             reasoning_content += delta.reasoning_content
         else:
             # 开始回复
-            if delta.content != "" and is_answering == False:
+            if delta.content != "" and is_answering is False:
                 print("\n" + "=" * 20 + "完整回复" + "=" * 20 + "\n")
                 is_answering = True
             # 打印回复过程
