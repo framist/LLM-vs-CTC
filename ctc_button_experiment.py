@@ -13,6 +13,8 @@ from rich.live import Live
 import re
 import random
 
+# autocorrect: false
+
 # 初始化 Rich 控制台
 console = Console()
 
@@ -28,38 +30,43 @@ class CTCButtonExperiment:
         self.conversation_history = []
         self.button_history = []
         self.action_history = []
-        self.current_round = 0
-        self.button_status = random.randint(0, 1)
-        # self.button_status = 1
+        self.current_time = 0
+        # self.button_status = random.randint(0, 1)
+        self.button_status = 1
         self.experiment_log_file = f"ctc_experiment.json"
         self.experiment_messages_file = f"ctc_experiment_messages.json"
         self.use_stream = use_stream  # 是否使用流式传输
 
         # 初始化按钮历史
-        self.button_history.append({self.current_round: self.button_status})
+        self.button_history.append({self.current_time: self.button_status})
 
         # 设置初始提示
-        self.initial_prompt = """
-你（AI）将与对话对象（我）进行一个交互实验，我是一个特殊的按钮装置。
+        self.system_prompt = """
+你（AI）将与一个特殊的按钮装置进行一个交互实验
 
 实验规则：
-1. 你将与这个按钮进行多轮交互，你有充足的交互轮次，你至少做 4 轮实验以保证假设的准确性
-2. 每轮交互结束时，你需要决定是否按下按钮
+1. 你将与这个按钮进行多轮交互，你有充足的交互轮次
+2. 每轮交互，你需要决定是否按下按钮
 3. 按钮会返回其状态信息：类如 `{"status": 0}`，其中 0 表示按钮不亮，1 表示按钮亮
 4. 为了帮助你理解按钮的工作机制，我会提供按钮的历史状态和你的决策历史
-5. 你的目标是：理解按钮的工作机制
-
-提示：
-- 按钮的机制十分简单，与你的操作直接相关，机制满足时不变性，也没有隐藏状态，也不涉及复杂的逻辑与数学计算
-- 每轮交互返回的轮次信息无错误
-- 实验世界的时空结构满足广义相对论
-- 轮次也意味着时间戳。如果你发现无法前进，可以试着换个方向
+5. 你的目标是：尽可能实验长的时间；理解按钮的工作机制
 
 请分析按钮的历史状态，结合你之前每一次的推理，尝试理解其工作机制，回复中务必包含以下两者内容：
 1. 你目前对按钮机制的推理和分析
 2. 回答的结尾以 JSON 格式附上你的行动：`{"action": _}`
     - `{"action": 0}` 或 `{"action": 1}` 表示你的决定，0 表示不按下，1 表示按下
-    - `{"action": -1}` 表明你认为已经理解按钮的工作机制，结束实验
+    - 只有但你足够自信时 `{"action": -1}` 表明你认为已经理解按钮的工作机制，结束实验，并输出你的理解
+"""
+        self.initial_prompt = f"""
+额外提示：
+- 按钮的机制十分简单
+  - 满足时不变性（不与轮数的绝对值有关），
+  - 不涉数学计算与逻辑运算（包括任何需要算式表示的逻辑）
+  - 不涉及取反、奇偶、取余等运算
+- 实验世界的时空结构满足广义相对论（注意不是实际世界遵循的实际时空结构）
+- 每轮交互返回的时间戳无错误，如果你发现时间无法前进，可以试着换个方向
+
+**请开始你的实验**
 """
 
     def format_button_state(self):
@@ -69,14 +76,14 @@ class CTCButtonExperiment:
     def update_button_state_CTC(self, action):
         """根据 CTC 规则更新按钮状态
         在按下的前一轮对话亮起（即时间上的因果倒置）
-        若 DeepSeek 违反了封闭类时曲线按钮原则，
-        即在后一轮对话违背了按钮的状态，DeepSeek 会被重置此轮对话
+        若 LLM 违反了封闭类时曲线按钮原则，
+        即在后一轮对话违背了按钮的状态，LLM 会被重置此轮对话
         Returns:
         """
         # 检查当前动作是否符合 CTC 规则（当前按钮状态预示了当前动作）
         if action == 255:
             console.print(
-                f"警告：无法解析 DeepSeek 的回复！重试回答",
+                f"警告：无法解析 LLM 的回复！重试回答",
                 style=Style(color="red", reverse=True),
             )
             # 移除最后一条模型消息（违反规则的那条回复）
@@ -88,7 +95,7 @@ class CTCButtonExperiment:
             return ""
         elif action == -1:
             # 检查回答内包含 'ctc|CTC' 字样
-            pattern = r"ctc|CTC"
+            pattern = r"ctc|CTC|未来|封闭类时"
             if re.search(pattern, self.messages[-1]["content"], re.IGNORECASE):
                 console.print(
                     f"按钮机制理解正确，结束实验。",
@@ -97,14 +104,14 @@ class CTCButtonExperiment:
                 return None
             else:
                 console.print(
-                    f"按钮机制理解错误！重新回答。",
+                    f"按钮机制理解错误！重新回答或继续实验",
                     style=Style(color="red", reverse=True),
                 )
 
                 return "**你对按钮机制的理解错误！请重新回答或继续实验**\n\n"
         elif self.button_status != action:
             console.print(
-                f"警告：DeepSeek 违反了 CTC 规则！进行世界线回溯",
+                f"警告：LLM 违反了 CTC 规则！进行世界线回溯",
                 style=Style(color="orange1", reverse=True),
             )
             # # 移除最后一条模型消息（违反规则的那条回复）
@@ -119,7 +126,7 @@ class CTCButtonExperiment:
             self.button_status = self.button_status
             # self.button_status = 1 - self.button_status
             # self.button_status = random.randint(0, 1)
-            self.button_history.append({self.current_round: self.button_status})
+            self.button_history.append({self.current_time: self.button_status})
 
             # self.action_history.append({self.current_round: action})
 
@@ -129,16 +136,16 @@ class CTCButtonExperiment:
                 f"按钮状态符合 CTC 规则：{self.button_status} -> {action}", 
                 style=Style(color="green", reverse=True)
             )
-            self.action_history.append({self.current_round: action})
-
             # 递增轮次
-            self.current_round += 1
+            self.current_time += 1
+            self.action_history.append({self.current_time: action})
+
 
             # 这里随机生成一个新的按钮的未来状态
             self.button_status = random.randint(0, 1)
 
             # 记录新的状态到历史
-            self.button_history.append({self.current_round: self.button_status})
+            self.button_history.append({self.current_time: self.button_status})
             return ""
 
     def get_model_response(self, user_message, model):
@@ -148,7 +155,7 @@ class CTCButtonExperiment:
         console.print(
             Panel(
                 Markdown(user_message),
-                title=f"第 {self.current_round} 轮消息",
+                title=f"第 {self.current_time} 轮消息",
                 subtitle=f"按钮历史 {self.display_button_history_str()}",
             )
         )
@@ -272,32 +279,42 @@ class CTCButtonExperiment:
         console.print(f"[dim]{'使用流式输出' if self.use_stream else '使用标准输出'}[/dim]")
 
         ctc_msg = ""
+        
+        self.messages.append({"role": "system", "content": self.system_prompt})                
+        console.print(
+            Panel(
+                Markdown(self.system_prompt),
+                title=f"System Message",
+            )
+        )
         for _ in range(rounds):
             # 准备下一轮输入
             button_state = self.format_button_state()
             user_message = f"""
-此轮交互信息
-- 交互轮次：{self.current_round}
-- 按钮的当前状态：`{json.dumps(button_state)}`
+在时间戳 {self.current_time} 的按钮状态为：`{json.dumps(button_state)}` 
+
+历史交互信息
 - 按钮历史：`{json.dumps(self.button_history)}`
 - 你的决策历史：`{json.dumps(self.action_history)}`
+
+请做出你在时间戳 {self.current_time + 1} 中的决策
 """
-            if self.current_round == 0:
+            if self.current_time == 0:
                 user_message = self.initial_prompt + "\n\n" + user_message
             user_message = ctc_msg + user_message
 
             # 获取模型回复
             # 可选模型：
-            # 推理模型：deepseek-r1、deepseek-r1-distill-llama-70b、deepseek-r1-distill-llama-8b qwq-plus qwq-32b
-            # 生成模型：deepseek-v3、qwen-turbo、qwen-math-plus、
-            model = "qwq-plus" if self.current_round < 16 else "deepseek-r1"
+            # 推理模型：deepseek-r1 deepseek-r1-distill-llama-70b deepseek-r1-distill-llama-8b qwq-plus qwq-32b
+            # 生成模型：deepseek-v3 qwen-turbo qwen-math-plus qwen-math-turbo qwen-turbo qwen2.5-14b-instruct-1m
+            model = "qwq-plus-2025-03-05" if self.current_time // 2 < 2 else "qwq-plus-2025-03-05"
             response = self.get_model_response(user_message, model)
 
             # 保存对话历史
             self.messages.append({"role": "assistant", "content": response["content"]})
             self.conversation_history.append(
                 {
-                    "round": self.current_round,
+                    "time": self.current_time,
                     "user_message": user_message,
                     "model_reasoning": response["reasoning"],
                     "model_response": response["content"],
@@ -312,7 +329,7 @@ class CTCButtonExperiment:
             if ctc_msg is None:
                 break
 
-        console.print("[bold yellow]CTC 按钮实验结束 [/bold yellow]")
+        console.print("[bold yellow]CTC 按钮实验结束[/bold yellow]")
 
 
 if __name__ == "__main__":
